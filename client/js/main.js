@@ -10,6 +10,22 @@ socket.on('connect_error', (error) => {
     displayError('Connection to server failed. Please refresh the page.');
 });
 
+socket.on('connect', () => {
+    console.log('Connected to server');
+    displayMessage('Connected to server');
+});
+
+// Add more socket event listeners for debugging
+socket.on('status', (data) => {
+    console.log('Status:', data.message);
+    displayMessage(data.message);
+});
+
+socket.on('error', (data) => {
+    console.error('Server error:', data.message);
+    displayError(data.message);
+});
+
 // Create scene
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb); // Sky blue background
@@ -64,49 +80,56 @@ camera.lookAt(gameState.bird.position);
 
 // Load sound effects
 function loadSounds() {
-    const soundFiles = {
-        flap: './assets/sounds/flap.mp3',
-        wind: './assets/sounds/wind.mp3',
-        dive: './assets/sounds/dive.mp3'
-    };
-    
-    // Create sound objects (don't worry if sound files don't exist, game will still work)
+    // Check if assets/sounds directory likely exists, otherwise don't try to load sounds
     try {
-        // Wind sound (continuous)
-        const windSound = new THREE.Audio(audioListener);
-        const windLoader = new THREE.AudioLoader();
-        windLoader.load(soundFiles.wind, (buffer) => {
-            windSound.setBuffer(buffer);
-            windSound.setLoop(true);
-            windSound.setVolume(0.3);
-            gameState.sounds.wind = windSound;
-        }, 
-        undefined, // onProgress
-        (err) => { console.log('Wind sound not loaded, continuing without sound.'); });
+        const soundFiles = {
+            flap: './assets/sounds/flap.mp3',
+            wind: './assets/sounds/wind.mp3',
+            dive: './assets/sounds/dive.mp3'
+        };
         
-        // Flap sound (one-shot)
-        const flapSound = new THREE.Audio(audioListener);
-        const flapLoader = new THREE.AudioLoader();
-        flapLoader.load(soundFiles.flap, (buffer) => {
-            flapSound.setBuffer(buffer);
-            flapSound.setVolume(0.5);
-            gameState.sounds.flap = flapSound;
-        },
-        undefined, // onProgress
-        (err) => { console.log('Flap sound not loaded, continuing without sound.'); });
-        
-        // Dive sound (one-shot)
-        const diveSound = new THREE.Audio(audioListener);
-        const diveLoader = new THREE.AudioLoader();
-        diveLoader.load(soundFiles.dive, (buffer) => {
-            diveSound.setBuffer(buffer);
-            diveSound.setVolume(0.5);
-            gameState.sounds.dive = diveSound;
-        },
-        undefined, // onProgress
-        (err) => { console.log('Dive sound not loaded, continuing without sound.'); });
+        // Create sound objects (don't worry if sound files don't exist, game will still work)
+        try {
+            // Wind sound (continuous)
+            const windSound = new THREE.Audio(audioListener);
+            const windLoader = new THREE.AudioLoader();
+            windLoader.load(soundFiles.wind, (buffer) => {
+                windSound.setBuffer(buffer);
+                windSound.setLoop(true);
+                windSound.setVolume(0.3);
+                gameState.sounds.wind = windSound;
+            }, 
+            undefined, // onProgress
+            (err) => { console.log('Wind sound not loaded, continuing without sound.'); });
+            
+            // Flap sound (one-shot)
+            const flapSound = new THREE.Audio(audioListener);
+            const flapLoader = new THREE.AudioLoader();
+            flapLoader.load(soundFiles.flap, (buffer) => {
+                flapSound.setBuffer(buffer);
+                flapSound.setVolume(0.5);
+                gameState.sounds.flap = flapSound;
+            },
+            undefined, // onProgress
+            (err) => { console.log('Flap sound not loaded, continuing without sound.'); });
+            
+            // Dive sound (one-shot)
+            const diveSound = new THREE.Audio(audioListener);
+            const diveLoader = new THREE.AudioLoader();
+            diveLoader.load(soundFiles.dive, (buffer) => {
+                diveSound.setBuffer(buffer);
+                diveSound.setVolume(0.5);
+                gameState.sounds.dive = diveSound;
+            },
+            undefined, // onProgress
+            (err) => { console.log('Dive sound not loaded, continuing without sound.'); });
+        } catch (e) {
+            console.log('Sound system not available, continuing without sound.');
+        }
     } catch (e) {
-        console.log('Sound system not available, continuing without sound.');
+        console.log('Sound directory not available, continuing without sound.');
+        // Make sure gameState.sounds is still an object to prevent errors
+        gameState.sounds = {};
     }
 }
 
@@ -115,6 +138,8 @@ try {
     loadSounds();
 } catch (e) {
     console.log('Sound system initialization failed, continuing without sound.');
+    // Initialize empty sounds object to prevent errors
+    gameState.sounds = {};
 }
 
 // Setup webcam and socket communication
@@ -217,16 +242,16 @@ function updateDebugDisplay() {
 }
 
 // Game state update from server
-socket.on('movement_data', (data) => {
-    const { commands, keypoints, bird_state } = data;
+socket.on('motion_data', (data) => {
+    console.log('Received motion data:', data);
     
-    // Draw skeleton on video
-    if (keypoints && keypoints.length > 0) {
-    drawSkeleton(keypoints);
+    // If we have keypoints, draw the skeleton
+    if (data.keypoints && data.keypoints.length > 0 && gameState.showSkeleton) {
+        drawSkeleton(data.keypoints);
     }
     
-    // Start game when first valid command is received
-    if (!gameState.started && commands && Object.keys(commands).length > 0) {
+    // Start game when first valid data is received
+    if (!gameState.started) {
         gameState.started = true;
         displayMessage("Game started! Move your body to control the bird.");
         
@@ -234,105 +259,27 @@ socket.on('movement_data', (data) => {
         if (gameState.sounds.wind) {
             gameState.sounds.wind.play();
         }
-    }
-    
-    // Apply client-side physics if no server physics
-    if (!bird_state && gameState.started) {
-        // Apply gravity - bird falls if not flapping or gliding
-        if (!commands.flap && commands.state !== 'glide') {
-            gameState.birdState.verticalMomentum -= gameState.physics.gravity;
-        }
         
-        // Apply vertical momentum
-        gameState.birdState.height += gameState.birdState.verticalMomentum;
-        
-        // Ground collision
-        if (gameState.birdState.height <= 0) {
-            gameState.birdState.height = 0;
-            gameState.birdState.verticalMomentum = 0;
-            gameState.birdState.speed *= 0.95; // Friction with ground
-        }
-        
-        // Air resistance - gradually slows the bird
-        gameState.birdState.speed *= gameState.physics.drag;
-        gameState.birdState.verticalMomentum *= 0.95;
-    }
-    
-    // Update bird state based on commands
-    if (commands.state === 'glide') {
-        gameState.birdState.wingFlap = false;
-        
-        // Simple gliding physics if no server physics
-        if (!bird_state) {
-            // Gliding provides lift proportional to speed
-            const lift = gameState.physics.liftFactor * gameState.birdState.speed;
-            gameState.birdState.verticalMomentum = Math.max(-0.01, gameState.birdState.verticalMomentum);
-            gameState.birdState.height += lift;
-        }
-        
-        playStateSound('glide');
-    } else if (commands.state === 'dive') {
-        gameState.birdState.wingFlap = false;
-        
-        // Simple diving physics if no server physics
-        if (!bird_state) {
-            // Diving increases speed and adds downward momentum
-            const intensity = commands.dive_intensity || 0.5;
-            gameState.birdState.speed += 0.03 * intensity;
-            gameState.birdState.verticalMomentum -= 0.01 * intensity;
-        }
-        
-        playStateSound('dive');
-    } else if (commands.state === 'gain_height') {
-        gameState.birdState.wingFlap = true;
-        gameState.birdState.wingFlapSpeed = 0.2 + (commands.height_gain || 0) * 0.3;
-        
-        // Simple height gain physics if no server physics
-        if (!bird_state) {
-            const gain = commands.height_gain || 0.5;
-            gameState.birdState.verticalMomentum += 0.03 * gain;
-            gameState.birdState.speed = Math.max(gameState.birdState.speed - 0.01 * gain, 0.05);
-        }
-        
-        playStateSound('flap');
-    } else {
-        playStateSound('none');
-    }
-    
-    // Update flapping
-    if ('flap' in commands) {
-        gameState.birdState.wingFlap = commands.flap;
-        gameState.birdState.wingFlapSpeed = commands.flap_intensity || 0.1;
-        
-        // Simple flapping physics if no server physics
-        if (!bird_state && commands.flap) {
-            const intensity = commands.flap_intensity || 0.5;
-            gameState.birdState.verticalMomentum += gameState.physics.flapStrength * intensity;
-            gameState.birdState.speed += 0.01 * intensity; // Forward momentum from flapping
-        }
-        
-        if (commands.flap) {
-            playStateSound('flap');
+        // Hide loading screen if it's still visible
+        const loadingElement = document.getElementById('loading');
+        if (loadingElement) {
+            loadingElement.classList.add('fade-out');
+            setTimeout(() => {
+                loadingElement.style.display = 'none';
+            }, 500);
         }
     }
     
-    // Use server-computed physics if available
-    if (bird_state) {
-        gameState.birdState.speed = bird_state.speed;
-        gameState.birdState.height = bird_state.height;
-        gameState.birdState.turn = bird_state.turn;
-    } else if (commands.turn) {
-        // Fallback to client-side turn calculation - more extreme turning as requested
-        const turnAngle = commands.turn_angle || 0;
-        const turnPower = Math.pow(turnAngle / 60, 1.5) * 0.05; // Non-linear response for sharper turns
-        gameState.birdState.turn = commands.turn === 'left' ? -turnPower : turnPower;
-    } else {
-        // Reset turn if no command
-        gameState.birdState.turn *= 0.9;
-    }
+    // Update bird state
+    gameState.birdState.height = data.position[1];
+    gameState.birdState.speed = data.bird_data.speed;
+    gameState.birdState.turn = data.rotation[1]; // Y-axis rotation
     
-    // Apply speed limits
-    gameState.birdState.speed = Math.min(Math.max(gameState.birdState.speed, 0), gameState.physics.maxSpeed);
+    // Update last command for sound effects
+    if (data.state && data.state !== gameState.lastCommand) {
+        playStateSound(data.state);
+        gameState.lastCommand = data.state;
+    }
     
     // Update debug display
     updateDebugDisplay();
@@ -387,28 +334,64 @@ window.addEventListener('keydown', (event) => {
     }
 });
 
+// Export the initGame function for use in index.html
+export async function initGame() {
+    console.log('Initializing game...');
+    
+    try {
+        // Setup webcam and socket communication
+        await setupVideo(socket);
+        
+        // Start the animation loop
+        animate(0);
+        
+        console.log('Game initialized successfully!');
+        return true;
+    } catch (error) {
+        console.error('Error initializing game:', error);
+        throw error;
+    }
+}
+
 // Animation loop
 function animate(timestamp) {
-    requestAnimationFrame(animate);
-    
-    // Calculate delta time
-    if (!gameState.lastTime) {
-        gameState.lastTime = timestamp;
+    if (gameState.paused) {
+        requestAnimationFrame(animate);
+        return;
     }
-    const deltaTime = (timestamp - gameState.lastTime) / 1000;
+    
+    // Calculate delta time for smooth animation
+    const delta = timestamp - gameState.lastTime;
     gameState.lastTime = timestamp;
     
-    if (gameState.started && !gameState.paused) {
-        // Update bird
-        updateBird(gameState.bird, gameState.birdState);
+    // Update bird animation
+    updateBird(gameState.bird, gameState.birdState, delta);
+    
+    // Update world elements
+    updateWorld(scene, gameState);
+    
+    // Update camera if following bird
+    if (!gameState.debug.freeCam) {
+        // Position camera slightly behind and above bird
+        const cameraTarget = new THREE.Vector3();
+        cameraTarget.copy(gameState.bird.position);
         
-        // Update world (clouds, camera, etc.)
-        updateWorld(scene, camera, gameState.bird, gameState.debug.freeCam);
+        // Create an offset based on bird's rotation
+        const cameraOffset = new THREE.Vector3(0, 2, 8);
+        cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -gameState.bird.rotation.y);
+        
+        // Apply the offset
+        camera.position.x = cameraTarget.x - cameraOffset.x;
+        camera.position.y = cameraTarget.y + cameraOffset.y;
+        camera.position.z = cameraTarget.z - cameraOffset.z;
+        
+        // Look at the bird
+        camera.lookAt(cameraTarget);
     }
     
     // Render scene
     renderer.render(scene, camera);
+    
+    // Request next frame
+    requestAnimationFrame(animate);
 }
-
-// Start animation loop
-animate();
