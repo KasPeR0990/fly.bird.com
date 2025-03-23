@@ -1,3 +1,9 @@
+This is a vibe coded game, i haven't checked the code, it's only ai generated. My intention creating this was to try out cursor's agentic mode and see it's capabilities.
+
+This is a movement tracking game, where the player flies the bird my moving their body/ arms. It uses the webcam, but does not store any images from the cam. 
+
+
+
 # Bird Movement Game
 
 A 3D bird flying game controlled by your body movements using a webcam. This game uses OpenCV for motion tracking and Three.js for 3D rendering.
