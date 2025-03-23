@@ -222,7 +222,7 @@ socket.on('movement_data', (data) => {
     
     // Draw skeleton on video
     if (keypoints && keypoints.length > 0) {
-        drawSkeleton(keypoints);
+    drawSkeleton(keypoints);
     }
     
     // Start game when first valid command is received

@@ -3,15 +3,18 @@ import time
 import cv2
 import numpy as np
 import base64
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_socketio import SocketIO
 import json
 from motion_tracking import process_frame
 from utils import BirdPhysics, World
 
+# Get the absolute path to the client directory
+client_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'client'))
+
 app = Flask(__name__, 
-    static_folder="../client",
-    template_folder="../client")
+    static_folder=client_dir,
+    template_folder=client_dir)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global variables
@@ -40,6 +43,15 @@ def process_image(base64_image):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# Add explicit routes for JS and CSS files
+@app.route('/js/<path:filename>')
+def serve_js(filename):
+    return send_from_directory(os.path.join(client_dir, 'js'), filename)
+
+@app.route('/css/<path:filename>')
+def serve_css(filename):
+    return send_from_directory(os.path.join(client_dir, 'css'), filename)
 
 @socketio.on('connect')
 def handle_connect():
