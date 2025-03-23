@@ -24,13 +24,26 @@
     <script type="module">
         import { initGame } from './js/main.js';
         
+        console.log('Page loaded, beginning initialization');
+        
         // Start the game when page loads
         window.addEventListener('load', () => {
+            console.log('Window loaded event fired');
             const loadingElement = document.getElementById('loading');
             
+            // Force hide loading screen after 10 seconds regardless of status
+            setTimeout(() => {
+                if (loadingElement && loadingElement.style.display !== 'none') {
+                    console.log('Force removing loading screen after timeout');
+                    loadingElement.style.display = 'none';
+                }
+            }, 10000);
+            
             try {
+                console.log('Attempting to initialize game');
                 initGame()
                     .then(() => {
+                        console.log('Game initialization promise resolved');
                         // Hide loading screen when game is initialized
                         setTimeout(() => {
                             loadingElement.classList.add('fade-out');

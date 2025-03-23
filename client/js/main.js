@@ -142,9 +142,6 @@ try {
     gameState.sounds = {};
 }
 
-// Setup webcam and socket communication
-setupVideo(socket);
-
 // Create game instructions element
 function createInstructions() {
     const instructions = document.createElement('div');
@@ -345,6 +342,18 @@ export async function initGame() {
         // Start the animation loop
         animate(0);
         
+        // Let's also force hide the loading screen after 5 seconds as a fallback
+        setTimeout(() => {
+            const loadingElement = document.getElementById('loading');
+            if (loadingElement && loadingElement.style.display !== 'none') {
+                console.log('Forcing loading screen to hide after timeout');
+                loadingElement.classList.add('fade-out');
+                setTimeout(() => {
+                    loadingElement.style.display = 'none';
+                }, 500);
+            }
+        }, 5000);
+        
         console.log('Game initialized successfully!');
         return true;
     } catch (error) {
@@ -355,43 +364,47 @@ export async function initGame() {
 
 // Animation loop
 function animate(timestamp) {
+    // Request next frame first to ensure animation continues even if there's an error
+    requestAnimationFrame(animate);
+    
     if (gameState.paused) {
-        requestAnimationFrame(animate);
         return;
     }
     
     // Calculate delta time for smooth animation
-    const delta = timestamp - gameState.lastTime;
+    const delta = timestamp - gameState.lastTime || 0;
     gameState.lastTime = timestamp;
     
-    // Update bird animation
-    updateBird(gameState.bird, gameState.birdState, delta);
-    
-    // Update world elements
-    updateWorld(scene, gameState);
-    
-    // Update camera if following bird
-    if (!gameState.debug.freeCam) {
-        // Position camera slightly behind and above bird
-        const cameraTarget = new THREE.Vector3();
-        cameraTarget.copy(gameState.bird.position);
+    try {
+        // Update bird animation
+        updateBird(gameState.bird, gameState.birdState, delta);
         
-        // Create an offset based on bird's rotation
-        const cameraOffset = new THREE.Vector3(0, 2, 8);
-        cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -gameState.bird.rotation.y);
+        // Update world elements
+        updateWorld(scene, gameState);
         
-        // Apply the offset
-        camera.position.x = cameraTarget.x - cameraOffset.x;
-        camera.position.y = cameraTarget.y + cameraOffset.y;
-        camera.position.z = cameraTarget.z - cameraOffset.z;
+        // Update camera if following bird
+        if (!gameState.debug.freeCam) {
+            // Position camera slightly behind and above bird
+            const cameraTarget = new THREE.Vector3();
+            cameraTarget.copy(gameState.bird.position);
+            
+            // Create an offset based on bird's rotation
+            const cameraOffset = new THREE.Vector3(0, 2, 8);
+            cameraOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), -gameState.bird.rotation.y);
+            
+            // Apply the offset
+            camera.position.x = cameraTarget.x - cameraOffset.x;
+            camera.position.y = cameraTarget.y + cameraOffset.y;
+            camera.position.z = cameraTarget.z - cameraOffset.z;
+            
+            // Look at the bird
+            camera.lookAt(cameraTarget);
+        }
         
-        // Look at the bird
-        camera.lookAt(cameraTarget);
+        // Render scene
+        renderer.render(scene, camera);
+    } catch (error) {
+        console.error('Error in animation loop:', error);
+        // Continue animation even if there's an error
     }
-    
-    // Render scene
-    renderer.render(scene, camera);
-    
-    // Request next frame
-    requestAnimationFrame(animate);
 }

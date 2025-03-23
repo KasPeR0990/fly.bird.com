@@ -30,6 +30,8 @@ const POSE_CONNECTIONS = [
 
 // Setup video and canvas for pose detection
 async function setupVideo(socket) {
+    console.log('Setting up video capture...');
+
     // Create video element if it doesn't exist
     if (!videoElement) {
         videoElement = document.createElement('video');
@@ -105,6 +107,9 @@ async function setupVideo(socket) {
     
     // Request camera access
     try {
+        console.log('Requesting camera access...');
+        displayVideoStatus('Waiting for camera permission...');
+        
         const stream = await navigator.mediaDevices.getUserMedia({
             'video': {
                 facingMode: 'user',
@@ -114,21 +119,72 @@ async function setupVideo(socket) {
             }
         });
         
+        console.log('Camera access granted');
         videoElement.srcObject = stream;
+        
+        // Start sending frames even before video is fully loaded
+        setTimeout(() => {
+            sendFrames(socket);
+        }, 500);
         
         // Wait for video to be loaded
         return new Promise((resolve) => {
             videoElement.onloadedmetadata = () => {
-                videoElement.play();
-                displayVideoStatus('Camera connected');
-                sendFrames(socket);
-                resolve(videoElement);
+                console.log('Video metadata loaded');
+                videoElement.play().then(() => {
+                    console.log('Video playback started');
+                    displayVideoStatus('Camera connected');
+                    resolve(videoElement);
+                }).catch(err => {
+                    console.error('Error playing video:', err);
+                    displayVideoStatus(`Error playing video: ${err.message}`, 'error');
+                    // Resolve anyway to allow the game to continue
+                    resolve(videoElement);
+                });
             };
+            
+            // Add a timeout to resolve the promise even if video fails to load
+            setTimeout(() => {
+                console.log('Video load timeout - resolving anyway');
+                displayVideoStatus('Camera timeout - proceeding anyway');
+                resolve(videoElement);
+            }, 3000);
         });
     } catch (error) {
-        displayVideoStatus(`Error accessing camera: ${error.message}`, 'error');
         console.error('Error accessing camera:', error);
-        throw error;
+        displayVideoStatus(`Camera error: ${error.message}. Game will continue without tracking.`, 'error');
+        
+        // Handle the case where we don't have camera access
+        const emptyCanvas = document.createElement('canvas');
+        emptyCanvas.width = videoWidth;
+        emptyCanvas.height = videoHeight;
+        const emptyCtx = emptyCanvas.getContext('2d');
+        emptyCtx.fillStyle = '#333333';
+        emptyCtx.fillRect(0, 0, videoWidth, videoHeight);
+        emptyCtx.fillStyle = '#FF0000';
+        emptyCtx.font = '20px Arial';
+        emptyCtx.textAlign = 'center';
+        emptyCtx.fillText('Camera not available', videoWidth/2, videoHeight/2 - 20);
+        emptyCtx.fillText('Game will run with default controls', videoWidth/2, videoHeight/2 + 20);
+        
+        // Create a placeholder element
+        const placeholder = document.createElement('div');
+        placeholder.style.backgroundColor = '#333';
+        placeholder.style.color = '#f00';
+        placeholder.style.width = '100%';
+        placeholder.style.height = '100%';
+        placeholder.style.display = 'flex';
+        placeholder.style.alignItems = 'center';
+        placeholder.style.justifyContent = 'center';
+        placeholder.innerHTML = '<div>Camera not available<br>Game will run with default controls</div>';
+        
+        // Add placeholder to video container
+        const videoContainer = document.getElementById('video-container');
+        videoContainer.innerHTML = '';
+        videoContainer.appendChild(placeholder);
+        
+        // Continue anyway so the game can run without camera
+        return Promise.resolve(null);
     }
 }
 
