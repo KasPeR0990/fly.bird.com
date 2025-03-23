@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Bird Movement Game</title>
+    <link rel="stylesheet" href="css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+</head>
+<body>
+    <div id="loading" class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading game...</div>
+    </div>
+
+    <div id="video-container">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="canvas"></canvas>
+        <div id="video-status"></div>
+    </div>
+    
+    <div id="scene-container"></div>
+
+    <!-- External libraries -->
+    <script src="js/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
+    
+    <!-- Game modules -->
+    <script type="module" src="js/bird.js"></script>
+    <script type="module" src="js/world.js"></script>
+    <script type="module" src="js/video.js"></script>
+    <script type="module" src="js/main.js"></script>
+
+    <script>
+        // Hide loading screen when game is ready
+        window.addEventListener('load', function() {
+            // Small delay to ensure everything is loaded
+            setTimeout(function() {
+                const loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.opacity = '0';
+                    setTimeout(() => loading.style.display = 'none', 500);
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
