@@ -1,15 +1,18 @@
-body, html {
+/* Global styles */
+html, body {
     margin: 0;
     padding: 0;
+    width: 100%;
     height: 100%;
     overflow: hidden;
     font-family: Arial, sans-serif;
     background-color: #000;
+    color: #fff;
 }
 
-/* Scene container */
+/* Scene container for Three.js */
 #scene-container {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
@@ -17,237 +20,155 @@ body, html {
     z-index: 1;
 }
 
-/* Video container */
+/* Video container for camera feed and pose detection */
 #video-container {
-    position: absolute;
+    position: fixed;
     bottom: 20px;
     right: 20px;
-    width: 320px;
-    height: 240px;
-    border: 2px solid rgba(0, 255, 0, 0.7);
+    width: 240px;
+    height: 180px;
+    border: 2px solid rgba(76, 255, 76, 0.8); /* Neon green border */
     border-radius: 8px;
     overflow: hidden;
     z-index: 10;
-    background-color: rgba(0, 0, 0, 0.6);
-    box-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
-    transition: all 0.3s ease;
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 20px rgba(76, 255, 76, 0.4);
+    transition: width 0.3s, height 0.3s, opacity 0.3s;
 }
 
 #video-container:hover {
-    width: 400px;
-    height: 300px;
-    box-shadow: 0 0 25px rgba(0, 255, 0, 0.8);
+    width: 320px;
+    height: 240px;
+    opacity: 1;
 }
 
-#video {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    opacity: 0.8;
-}
-
-/* Canvas overlays skeleton and instructions */
-#canvas {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    z-index: 2;
-}
-
-/* Video status message */
-#video-status {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    right: 10px;
-    padding: 8px;
-    background-color: rgba(0, 0, 0, 0.7);
-    color: #fff;
-    border-radius: 4px;
-    text-align: center;
-    font-size: 14px;
-    display: none;
-    z-index: 3;
-}
-
-#video-status.error {
-    background-color: rgba(255, 0, 0, 0.7);
-}
-
-/* Game messages */
-.message {
-    position: fixed;
-    top: 50px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 15px 20px;
-    background-color: rgba(0, 0, 0, 0.8);
-    color: #fff;
-    border-radius: 8px;
-    z-index: 100;
-    text-align: center;
-    animation: fade-in 0.3s ease-in;
-    font-size: 16px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.message.error {
-    background-color: rgba(200, 0, 0, 0.9);
-    border: 1px solid rgba(255, 100, 100, 0.5);
-}
-
-.message.fade-out {
-    animation: fade-out 0.5s ease-out forwards;
-}
-
-/* Loading indicator */
-.loading {
+/* Loading screen */
+#loading {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.9);
+    background-color: #000;
     display: flex;
     flex-direction: column;
-    align-items: center;
     justify-content: center;
-    color: #fff;
+    align-items: center;
     z-index: 1000;
     transition: opacity 0.5s;
-    font-size: 18px;
 }
 
-.loading-spinner {
+.fade-out {
+    opacity: 0;
+}
+
+.spinner {
     width: 50px;
     height: 50px;
-    border: 5px solid rgba(255, 255, 255, 0.3);
+    border: 5px solid rgba(76, 255, 76, 0.3);
     border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
+    border-top-color: #4CFF4C;
+    animation: spin 1s infinite ease-in-out;
     margin-bottom: 20px;
-}
-
-/* Game instructions */
-.instructions {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background-color: rgba(0, 0, 0, 0.7);
-    color: #fff;
-    padding: 15px;
-    border-radius: 8px;
-    max-width: 300px;
-    font-size: 14px;
-    z-index: 20;
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
-    border: 1px solid rgba(0, 255, 0, 0.3);
-}
-
-.instructions h3 {
-    margin-top: 0;
-    color: rgb(0, 255, 0);
-    font-size: 16px;
-    border-bottom: 1px solid rgba(0, 255, 0, 0.3);
-    padding-bottom: 5px;
-}
-
-.instructions ul {
-    padding-left: 20px;
-    margin: 10px 0;
-}
-
-.instructions li {
-    margin-bottom: 8px;
-}
-
-.instructions p {
-    margin: 10px 0 0 0;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.debug-panel {
-    position: absolute;
-    top: 220px;
-    left: 20px;
-    background-color: rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(0, 255, 0, 0.5);
-    color: #fff;
-    padding: 12px;
-    border-radius: 8px;
-    width: 220px;
-    font-size: 14px;
-    z-index: 20;
-    box-shadow: 0 0 15px rgba(0, 255, 0, 0.2);
-    font-family: monospace;
-}
-
-.debug-panel h4 {
-    margin-top: 0;
-    color: rgb(0, 255, 0);
-    font-size: 16px;
-    border-bottom: 1px solid rgba(0, 255, 0, 0.3);
-    padding-bottom: 5px;
-    margin-bottom: 10px;
-}
-
-#debug-content {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 8px;
-}
-
-#debug-content div {
-    display: flex;
-    justify-content: space-between;
-}
-
-#debug-content span {
-    color: rgb(0, 255, 0);
-    font-weight: bold;
-}
-
-#debug-state {
-    text-transform: uppercase;
-}
-
-/* Animations */
-@keyframes fade-in {
-    from { opacity: 0; transform: translate(-50%, -20px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
-}
-
-@keyframes fade-out {
-    from { opacity: 1; transform: translate(-50%, 0); }
-    to { opacity: 0; transform: translate(-50%, -20px); }
 }
 
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
 
+.loading-text {
+    font-size: 20px;
+    color: #4CFF4C;
+    text-shadow: 0 0 10px rgba(76, 255, 76, 0.7);
+}
+
+/* Error message */
+.error-message {
+    background-color: rgba(255, 0, 0, 0.2);
+    border: 1px solid rgba(255, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.error-message button {
+    background-color: #4CFF4C;
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 10px;
+}
+
+/* Video status message */
+.status-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 5px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: #4CFF4C;
+    text-align: center;
+    font-size: 12px;
+    z-index: 11;
+}
+
+.status-message.error {
+    background-color: rgba(255, 0, 0, 0.6);
+    color: white;
+}
+
+.status-message.warning {
+    background-color: rgba(255, 200, 0, 0.6);
+    color: black;
+}
+
+/* Game messages */
+#game-message {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: #4CFF4C;
+    padding: 10px 20px;
+    border-radius: 20px;
+    max-width: 80%;
+    text-align: center;
+    z-index: 20;
+    border: 1px solid #4CFF4C;
+    box-shadow: 0 0 15px rgba(76, 255, 76, 0.5);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+#game-message.visible {
+    opacity: 1;
+}
+
+/* Instructions layer */
+#instructions-layer {
+    text-shadow: 0 0 5px rgba(76, 255, 76, 0.7);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     #video-container {
+        width: 160px;
+        height: 120px;
+    }
+    
+    #video-container:hover {
         width: 240px;
         height: 180px;
     }
     
-    #video-container:hover {
-        width: 280px;
-        height: 210px;
-    }
-    
-    .instructions {
-        max-width: 250px;
-        font-size: 13px;
-    }
-    
-    .debug-panel {
-        width: 180px;
-        font-size: 12px;
+    .loading-text {
+        font-size: 16px;
     }
 }

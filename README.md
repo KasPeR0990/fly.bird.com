@@ -1,120 +1,97 @@
-# fly.bird.com
-motion tracking bird game. 
+# Bird Movement Game
 
+A 3D bird flying game controlled by your body movements using a webcam. This game uses OpenCV for motion tracking and Three.js for 3D rendering.
 
+## Requirements
 
-uses opencv to track motion. no images stored. 
+- Python 3.7+ 
+- Webcam
+- Modern browser with WebGL support
 
+## Installation
 
+1. Clone this repository:
+```
+git clone https://your-repository-url/bird-movement-game.git
+cd bird-movement-game
+```
 
+2. Install Python dependencies:
+```
+pip install flask flask-socketio opencv-python numpy
+```
 
+Or use the npm script:
+```
+npm run install-deps
+```
 
-Develop a browser-based game that integrates real-time camera input and body motion tracking. The player’s upper body movements (captured through the device’s camera) will control a bird character’s movement in the game. The game must include realistic physics, including gravity, acceleration, and responsive movement mechanics.
+3. Download the OpenCV pose model files (optional - a fallback mode will be used if not available):
+   - Create the directory: `server/models/pose/`
+   - Download the pose proto file: [pose_deploy_linevec.prototxt](https://raw.githubusercontent.com/CMU-Perceptual-Computing-Lab/openpose/master/models/pose/coco/pose_deploy_linevec.prototxt)
+   - For full pose detection capability, download the model weights file from [OpenPose GitHub](https://github.com/CMU-Perceptual-Computing-Lab/openpose/tree/master/models)
 
-General Requirements:
+## Running the Game
 
-The game runs in the browser.
+1. Start the server:
+```
+python server/app.py
+```
 
-The device camera is displayed in real time at the top right of the game screen.
+Or use the npm script:
+```
+npm start
+```
 
-The application must request and obtain camera permissions from the user.
+2. Open your browser and navigate to:
+```
+http://localhost:5000
+```
 
-Use the camera feed to capture body movements with a skeleton overlay, focusing only on the upper body.
+3. Allow camera access when prompted.
 
-Map the detected body motions to control the bird’s movements in the game.
+## Game Controls
 
-Implement physics for realistic movement, including gravity, acceleration, and turning dynamics.
+Control the bird with your body movements:
 
-Detailed Steps with Checkpoints:
+- **Glide**: Extend your arms straight out horizontally
+- **Turn**: Angle your upper body left or right
+- **Dive**: Bend forward with arms slightly down
+- **Flap**: Move your arms up and down quickly
+- **Gain Height**: Flap while leaning back
 
-Initialization & Camera Setup:
+Keyboard controls:
+- **D**: Toggle debug mode
+- **C**: Toggle camera follow
+- **S**: Toggle skeleton display
+- **P**: Pause/Resume game
 
-Task: Set up a basic web page that integrates a live camera feed.
+## How It Works
 
-Subtasks:
+1. The webcam captures your movements
+2. OpenCV's pose detection identifies key body points
+3. The server processes these points to determine flying commands
+4. The bird responds to your movements in real-time
 
-Create an HTML page with a dedicated area (at the top right) for the real-time camera feed.
+## Project Structure
 
-Write JavaScript to request camera permissions and display the live feed.
+- **server/** - Python server files
+  - **app.py** - Main Flask server
+  - **motion_tracking.py** - OpenCV pose detection
+  - **utils.py** - Physics and utility functions
+  - **models/** - OpenCV model files
+- **client/** - Frontend files
+  - **js/** - JavaScript files
+  - **css/** - Stylesheets
+  - **index.html** - Main HTML file
 
-Action: Once the camera setup is implemented, pause and output the current code and a brief summary. Wait for explicit confirmation before moving to the next step.
+## Troubleshooting
 
-Body Motion Tracking:
+- If the camera doesn't connect, check your browser permissions
+- If pose detection doesn't work well, try better lighting and ensure your whole body is visible
+- If you're using a fallback mode (no pose model files), expect limited detection accuracy
+- For performance issues, try closing other applications or reducing the video container size
 
-Task: Integrate a motion tracking library to capture body movements using a skeleton overlay.
+## License
 
-Subtasks:
-
-Import and configure a motion tracking library (e.g., PoseNet, MediaPipe, etc.).
-
-Focus on tracking the upper body (torso and arms).
-
-Overlay the skeleton on the live camera feed to confirm correct body setup.
-
-Action: After successfully setting up and verifying the body tracking, stop and provide a summary of the implementation. Wait for feedback before proceeding.
-
-Mapping Player Movements to Bird Movement:
-
-Task: Translate the player's body motions into game controls for a bird character.
-
-Subtasks:
-
-Define movement mechanics:
-
-Gliding: Arms stretched straight out → smooth, gravity-influenced gliding.
-
-Turning (Left/Right): Angling the upper body/torso in the respective direction (use provided image references for visual guidance).
-
-Diving: Bending forward with arms slightly down → increased acceleration.
-
-Flying (Gaining Speed & Height): Vertical arm movements mimicking bird flapping.
-
-Gaining More Height: Flapping while angling the torso upward.
-
-Code the logic to capture these movements and translate them into corresponding movements of the bird character within the game.
-
-Action: Present the mapping logic and sample code for review. Pause for feedback before continuing.
-
-Implementing Game Physics:
-
-Task: Add realistic physics to the game.
-
-Subtasks:
-
-Introduce gravity that continuously affects the bird.
-
-Implement acceleration mechanics:
-
-Diving increases forward speed.
-
-Faster flapping results in faster movement.
-
-Sharper upper body angling produces tighter turns.
-
-Ensure that physics calculations integrate seamlessly with the movement mapping.
-
-Action: Share the physics implementation details and code snippet. Stop and wait for explicit confirmation before moving to the final integration.
-
-Final Integration & Testing:
-
-Task: Consolidate all components into a single, coherent application.
-
-Subtasks:
-
-Merge the camera setup, body tracking, movement mapping, and physics engine.
-
-Test the full flow: from camera permission to real-time tracking, and from detecting body movements to controlling the bird.
-
-Debug any issues and refine the mappings to ensure smooth gameplay.
-
-Action: Once integrated, provide a final summary and the complete code. Wait for a final review and further instructions.
-
-Key Reminders:
-
-Stop and wait for explicit feedback after each step. Do not proceed until confirmation is given.
-
-Ensure every detail is implemented exactly as specified.
-
-Use clear, direct language and maintain the discrete structure throughout the process.
-
-All code and terminal commands must be in English.
+MIT

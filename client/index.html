@@ -1,46 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bird Movement Game</title>
     <link rel="stylesheet" href="css/style.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.min.js"></script>
 </head>
 <body>
-    <div id="loading" class="loading">
-        <div class="loading-spinner"></div>
-        <div>Loading game...</div>
-    </div>
-
-    <div id="video-container">
-        <video id="video" autoplay muted playsinline></video>
-        <canvas id="canvas"></canvas>
-        <div id="video-status"></div>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading Bird Movement Game...</div>
     </div>
     
     <div id="scene-container"></div>
-
-    <!-- External libraries -->
-    <script src="js/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js"></script>
     
-    <!-- Game modules -->
-    <script type="module" src="js/bird.js"></script>
-    <script type="module" src="js/world.js"></script>
-    <script type="module" src="js/video.js"></script>
-    <script type="module" src="js/main.js"></script>
-
-    <script>
-        // Hide loading screen when game is ready
-        window.addEventListener('load', function() {
-            // Small delay to ensure everything is loaded
-            setTimeout(function() {
-                const loading = document.getElementById('loading');
-                if (loading) {
-                    loading.style.opacity = '0';
-                    setTimeout(() => loading.style.display = 'none', 500);
-                }
-            }, 1000);
+    <div id="video-container">
+        <!-- Video feed and skeleton overlay will be inserted here by JavaScript -->
+    </div>
+    
+    <div id="game-message"></div>
+    
+    <script type="module">
+        import { initGame } from './js/main.js';
+        
+        // Start the game when page loads
+        window.addEventListener('load', () => {
+            const loadingElement = document.getElementById('loading');
+            
+            try {
+                initGame()
+                    .then(() => {
+                        // Hide loading screen when game is initialized
+                        setTimeout(() => {
+                            loadingElement.classList.add('fade-out');
+                            setTimeout(() => {
+                                loadingElement.style.display = 'none';
+                            }, 500);
+                        }, 1000);
+                    })
+                    .catch(error => {
+                        console.error('Error initializing game:', error);
+                        loadingElement.innerHTML = `
+                            <div class="error-message">
+                                Error initializing game: ${error.message}
+                                <br><br>
+                                Please ensure your camera is connected and you have granted camera permissions.
+                                <br><br>
+                                <button onclick="location.reload()">Try Again</button>
+                            </div>
+                        `;
+                    });
+            } catch (error) {
+                console.error('Critical error:', error);
+                loadingElement.innerHTML = `
+                    <div class="error-message">
+                        Critical error: ${error.message}
+                        <br><br>
+                        Please ensure your browser supports WebGL and camera access.
+                        <br><br>
+                        <button onclick="location.reload()">Try Again</button>
+                    </div>
+                `;
+            }
         });
     </script>
 </body>

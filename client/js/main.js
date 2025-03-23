@@ -1,7 +1,7 @@
 import * as THREE from './three.min.js';
 import { setupWorld, updateWorld } from './world.js';
 import { setupBird, updateBird } from './bird.js';
-import { setupVideo, drawSkeleton } from './video.js';
+import { setupVideo, drawSkeleton, displayVideoStatus, clearVideoStatus } from './video.js';
 
 // Create socket with error handling
 const socket = io();
@@ -52,7 +52,8 @@ const gameState = {
     debug: {
         showPhysics: false,
         freeCam: false
-    }
+    },
+    showSkeleton: true
 };
 
 // Setup world and bird
@@ -381,6 +382,8 @@ window.addEventListener('keydown', (event) => {
             );
             camera.lookAt(gameState.bird.position);
         }
+    } else if (event.key === 's' || event.key === 'S') {
+        gameState.showSkeleton = !gameState.showSkeleton;
     }
 });
 

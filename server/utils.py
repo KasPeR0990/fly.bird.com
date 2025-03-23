@@ -1,3 +1,6 @@
+import time
+import math
+import random
 import numpy as np
 from collections import deque
 
@@ -31,212 +34,151 @@ class MovementSmoother:
 # Physics calculations
 class BirdPhysics:
     def __init__(self):
-        # Base physics parameters - adjusted for more realistic flight
-        self.gravity = 0.02         # Stronger gravity for better diving
-        self.max_speed = 0.8        # Higher max speed
-        self.min_speed = 0.05       # Minimum speed to prevent stopping mid-air
-        self.drag = 0.985           # Air resistance (less drag for better momentum)
-        self.lift_factor = 0.025    # Base lift when gliding
+        # Physics parameters
+        self.gravity = 0.015
+        self.max_speed = 0.6
+        self.min_speed = 0.1
+        self.glide_drag = 0.0015
+        self.dive_acceleration = 0.03
+        self.lift_factor = 0.02
+        self.turn_factor = 0.1
+        self.energy_max = 100
+        self.energy_recovery_rate = 0.2
+        self.flap_energy_cost = 1.5
         
-        # Turning mechanics - more responsive turning
-        self.max_turn_rate = 0.05   # Increased for sharper turns
-        self.turn_responsiveness = 0.02
-        self.bank_drag_factor = 0.3 # More speed loss when banking hard
+        # Bird state
+        self.position = [0, 5, 0]  # x, y (height), z
+        self.rotation = [0, 0, 0]  # pitch, yaw, roll
+        self.momentum = [0, 0, 0]  # x, y, z momentum
+        self.speed = 0.2
+        self.energy = self.energy_max
+        self.state = "glide"
+        self.on_ground = False
+        self.last_update = time.time()
         
-        # Flapping mechanics - stronger effect
-        self.flap_lift = 0.03
-        self.flap_thrust = 0.04     # More thrust from flapping
-        self.flap_decay = 0.9       # Flap effect decays quickly
+        # Smoothing for state changes
+        self.state_buffer = deque(["glide"] * 5, maxlen=5)
         
-        # Diving mechanics - better acceleration
-        self.dive_acceleration = 0.035  # Increased acceleration during dives
-        self.dive_gravity_multiplier = 1.8  # More gravity pull during dives
-        self.dive_recovery_factor = 0.6     # Ability to pull out of dives
+    def update(self, commands):
+        # Calculate time delta
+        current_time = time.time()
+        delta_time = min(current_time - self.last_update, 0.1)  # Cap to prevent large jumps
+        self.last_update = current_time
         
-        # Height gain mechanics
-        self.height_gain_factor = 0.05
-        self.height_gain_speed_cost = 0.02
+        # Determine bird state from commands
+        current_state = commands.get("state", "none")
+        if current_state != "none":
+            self.state_buffer.append(current_state)
+            
+        # Use most common state in buffer to smooth transitions
+        self.state = max(set(self.state_buffer), key=self.state_buffer.count)
         
-        # State tracking
-        self.momentum = {
-            'vertical': 0,         # Vertical momentum
-            'forward': 0,          # Forward momentum
-            'rotation': 0          # Rotational momentum
-        }
-        self.energy = 1.0          # Energy system to prevent unlimited flapping
-        self.energy_recovery_rate = 0.004
-        self.energy_consumption_rate = 0.03
+        # Handle turning
+        turn_direction = commands.get("turn", None)
+        turn_angle = commands.get("turn_angle", 0)
         
-        # Previous state for better transitions
-        self.prev_state = 'none'
-        self.state_transition_timer = 0
-        
-        # Ground interaction
-        self.ground_friction = 0.92
-        self.ground_bounce = 0.2   # Slight bounce when hitting ground at speed
-        
-    def apply_physics(self, bird_state, commands):
-        """Apply physics rules to the bird's movement based on commands"""
-        updated_state = bird_state.copy()
-        
-        # Energy management - recovers slowly over time
-        if self.energy < 1.0:
-            self.energy = min(1.0, self.energy + self.energy_recovery_rate)
-        
-        # Apply base drag (air resistance)
-        updated_state['speed'] *= self.drag
-        
-        # Default state - always apply gravity (increased for more realistic falling)
-        gravity_multiplier = 1.0
-        
-        # Get the current movement state
-        movement_state = commands.get('state', 'none')
-        
-        # Apply more natural transitions between states
-        if movement_state != self.prev_state:
-            self.state_transition_timer = 0
+        if turn_direction == "left":
+            self.rotation[1] += self.turn_factor * turn_angle * delta_time * 50
+            # Banking effect (roll)
+            self.rotation[2] = min(25, 0.5 * turn_angle)
+        elif turn_direction == "right":
+            self.rotation[1] -= self.turn_factor * turn_angle * delta_time * 50
+            # Banking effect (roll) - negative for right turn
+            self.rotation[2] = max(-25, -0.5 * turn_angle)
         else:
-            self.state_transition_timer += 1
-        
-        # Process movement commands based on state
-        if movement_state == 'glide':
-            # Gliding provides lift proportional to speed but gradually loses speed
-            lift = self.lift_factor * updated_state['speed']
-            updated_state['height'] += lift
-            
-            # Speed decreases more at very low or very high heights (air density simulation)
-            height_factor = max(0, 1 - abs(updated_state['height'] - 10) / 15)
-            updated_state['speed'] = max(updated_state['speed'] - 0.003 * (1 + height_factor), self.min_speed)
-            
-            # Gradual build-up of vertical momentum for smoother gliding
-            self.momentum['vertical'] = self.momentum['vertical'] * 0.95 + 0.05 * lift
-            
-            # Forward momentum increases slightly during optimal gliding
-            if updated_state['height'] > 5 and updated_state['height'] < 15:
-                self.momentum['forward'] = min(self.momentum['forward'] + 0.001, 0.05)
-            
-        elif movement_state == 'dive':
-            # Diving increases speed dramatically based on intensity
-            intensity = commands.get('dive_intensity', 0.5)
-            
-            # Speed increases more when diving from higher altitude
-            height_factor = min(updated_state['height'] / 10, 1)
-            updated_state['speed'] += self.dive_acceleration * intensity * (1 + height_factor)
-            
-            # More gravity when diving
-            gravity_multiplier = self.dive_gravity_multiplier * intensity
-            
-            # Add forward momentum during diving
-            self.momentum['forward'] = self.momentum['forward'] * 0.9 + 0.1 * intensity
-            
-        elif movement_state == 'gain_height':
-            # Gaining height requires energy and costs speed
-            if self.energy > 0.1:  # Need minimum energy to gain height
-                height_gain = commands.get('height_gain', 0.5)
-                energy_cost = self.energy_consumption_rate * height_gain
-                
-                # Apply height gain proportional to available energy and current speed
-                speed_factor = min(updated_state['speed'] / 0.3, 1)  # Need some speed to gain height effectively
-                effective_gain = height_gain * (self.energy / 1.0) * speed_factor
-                
-                updated_state['height'] += self.height_gain_factor * effective_gain
-                updated_state['speed'] = max(updated_state['speed'] - self.height_gain_speed_cost * effective_gain, self.min_speed)
-                
-                # Consume energy
-                self.energy = max(0, self.energy - energy_cost)
-                
-                # Add upward momentum
-                self.momentum['vertical'] = min(self.momentum['vertical'] + 0.01 * effective_gain, 0.1)
-        
-        # Apply flapping for thrust and lift if enough energy
-        if 'flap' in commands and commands['flap'] and self.energy > 0.05:
-            intensity = commands.get('flap_intensity', 0.5)
-            
-            # Energy cost based on flap intensity
-            energy_cost = self.energy_consumption_rate * intensity
-            
-            # More effective flapping with higher energy
-            effective_intensity = intensity * (self.energy / 1.0)
-            
-            # Faster flapping = more speed (as requested)
-            thrust_increase = self.flap_thrust * effective_intensity * intensity  # Squared effect
-            lift_increase = self.flap_lift * effective_intensity
-            
-            # Apply thrust and lift
-            updated_state['speed'] = min(updated_state['speed'] + thrust_increase, self.max_speed)
-            updated_state['height'] += lift_increase
-            
-            # Add vertical momentum from flapping
-            self.momentum['vertical'] = self.momentum['vertical'] * 0.8 + 0.2 * lift_increase
-            
-            # Consume energy
-            self.energy = max(0, self.energy - energy_cost)
-        else:
-            # Bird falls faster if not actively flapping or gliding
-            if movement_state != 'glide':
-                gravity_multiplier *= 1.2
-        
-        # Apply turning with realistic banking physics - sharper turns as requested
-        if 'turn' in commands:
-            turn_angle = commands.get('turn_angle', 0)
-            direction = 1 if commands['turn'] == 'right' else -1
-            
-            # More extreme turning based on angle
-            turn_rate = self.turn_responsiveness * (turn_angle ** 1.5) * 0.01 * direction
-            
-            # Limit maximum turn rate
-            turn_rate = max(min(turn_rate, self.max_turn_rate), -self.max_turn_rate)
-            
-            # Higher turn rates at higher speeds
-            speed_factor = min(updated_state['speed'] / 0.3, 1.5)
-            turn_rate *= speed_factor
-            
-            # Apply turn rate with momentum
-            self.momentum['rotation'] = self.momentum['rotation'] * 0.8 + 0.2 * turn_rate
-            updated_state['turn'] = self.momentum['rotation']
-            
-            # Banking reduces speed and height more with sharper turns
-            banking_factor = abs(turn_rate) / self.max_turn_rate
-            updated_state['speed'] *= (1.0 - banking_factor * self.bank_drag_factor)
-            updated_state['height'] -= banking_factor * 0.015
-        else:
-            # Gradually return to center when not turning
-            self.momentum['rotation'] *= 0.9
-            updated_state['turn'] = self.momentum['rotation']
-        
-        # Calculate combined momentum effect
-        momentum_lift = self.momentum['vertical'] - (gravity_multiplier * self.gravity)
-        
-        # Apply gravity with momentum system for smoother flight
-        updated_state['height'] += momentum_lift
-        
-        # Apply forward momentum
-        updated_state['speed'] += self.momentum['forward']
-        
-        # Decay momentum
-        self.momentum['vertical'] *= 0.93
-        self.momentum['forward'] *= 0.95
-        
-        # Cap the bird's speed
-        updated_state['speed'] = max(min(updated_state['speed'], self.max_speed), 0)
-        
-        # Prevent bird from going through the ground
-        if updated_state['height'] <= 0:
-            updated_state['height'] = 0
-            
-            # Bounce if hitting ground at speed - more realistic
-            if momentum_lift < -0.02 and updated_state['speed'] > 0.2:
-                self.momentum['vertical'] = abs(momentum_lift) * self.ground_bounce
+            # Gradually return roll to level
+            if abs(self.rotation[2]) > 1:
+                self.rotation[2] *= 0.95
             else:
-                self.momentum['vertical'] = 0
+                self.rotation[2] = 0
+        
+        # Energy management
+        if "flap" in commands and commands["flap"]:
+            flap_intensity = commands.get("flap_intensity", 0.5)
+            energy_cost = self.flap_energy_cost * flap_intensity
             
-            # Ground friction slows the bird
-            updated_state['speed'] *= self.ground_friction
+            if self.energy >= energy_cost:
+                self.energy -= energy_cost
+                
+                # Flapping provides vertical lift and forward thrust
+                if self.state == "gain_height":
+                    # More upward momentum when trying to gain height
+                    height_gain = commands.get("height_gain", 0.5)
+                    self.momentum[1] += 0.04 * flap_intensity * height_gain * delta_time * 50
+                    self.speed += 0.005 * flap_intensity * delta_time * 50
+                else:
+                    # Regular flapping provides some lift and speed
+                    self.momentum[1] += 0.02 * flap_intensity * delta_time * 50
+                    self.speed += 0.01 * flap_intensity * delta_time * 50
+        else:
+            # Energy recovery when not flapping
+            self.energy = min(self.energy_max, self.energy + self.energy_recovery_rate * delta_time)
         
-        # Update state for next frame
-        self.prev_state = movement_state
+        # Apply physics based on bird state
+        if self.state == "glide":
+            # Gliding provides lift based on speed but gradually loses speed
+            self.momentum[1] += (self.lift_factor * self.speed - self.gravity) * delta_time * 50
+            self.speed = max(self.min_speed, self.speed - self.glide_drag * delta_time * 50)
+            
+            # Set pitch based on vertical momentum for visual effect
+            target_pitch = -15 if self.momentum[1] > 0 else 15
+            self.rotation[0] = self.rotation[0] * 0.9 + target_pitch * 0.1
+            
+        elif self.state == "dive":
+            # Diving accelerates downward and increases speed
+            dive_intensity = commands.get("dive_intensity", 0.5)
+            self.momentum[1] -= self.dive_acceleration * dive_intensity * delta_time * 50
+            self.speed = min(self.max_speed, self.speed + 0.02 * dive_intensity * delta_time * 50)
+            
+            # Set steep downward pitch for diving
+            self.rotation[0] = self.rotation[0] * 0.8 + 40 * 0.2
+            
+        elif self.state == "gain_height":
+            # Set upward pitch for gaining height
+            self.rotation[0] = self.rotation[0] * 0.8 + (-30) * 0.2
         
-        return updated_state
+        # Apply gravity
+        self.momentum[1] -= self.gravity * delta_time * 50
+        
+        # Momentum decay (air resistance)
+        for i in range(3):
+            self.momentum[i] *= 0.95
+        
+        # Move bird based on speed and rotation
+        yaw_rad = math.radians(self.rotation[1])
+        x_move = math.sin(yaw_rad) * self.speed * delta_time * 50
+        z_move = math.cos(yaw_rad) * self.speed * delta_time * 50
+        
+        self.position[0] += x_move + self.momentum[0] * delta_time * 50
+        self.position[1] += self.momentum[1] * delta_time * 50
+        self.position[2] += z_move + self.momentum[2] * delta_time * 50
+        
+        # Check if bird is on ground
+        if self.position[1] <= 0:
+            self.position[1] = 0
+            self.momentum[1] = 0
+            
+            if not self.on_ground:
+                self.on_ground = True
+                # Reduce speed when landing
+                self.speed *= 0.5
+                
+                # Reset momentum when landing
+                self.momentum = [0, 0, 0]
+        else:
+            self.on_ground = False
+        
+        # Cap speed to min/max
+        self.speed = min(max(self.speed, self.min_speed), self.max_speed)
+        
+        # Ensure yaw stays within 0-360 range
+        self.rotation[1] = self.rotation[1] % 360
+        
+    def get_position(self):
+        return self.position
+        
+    def get_rotation(self):
+        return self.rotation
 
 # Frame rate and timing utilities
 class TimingUtility:
@@ -256,3 +198,208 @@ class TimingUtility:
         
         # Cap delta time to prevent large jumps
         return min(delta, self.frame_time * 3)
+
+class World:
+    def __init__(self):
+        self.terrain_size = 1000
+        self.terrain_features = []
+        self.clouds = []
+        self.obstacles = []
+        self.collectibles = []
+        
+        # Generate initial world features
+        self._generate_terrain_features(20)
+        self._generate_clouds(15)
+        self._generate_obstacles(5)
+        self._generate_collectibles(10)
+        
+        # Track player's region for feature generation
+        self.last_region = (0, 0)
+        
+    def _generate_terrain_features(self, count):
+        """Generate terrain features like mountains and lakes"""
+        for _ in range(count):
+            feature_type = random.choice(["mountain", "lake", "forest"])
+            x = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            z = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            size = random.uniform(5, 30)
+            height = random.uniform(5, 25) if feature_type == "mountain" else 0
+            
+            self.terrain_features.append({
+                "type": feature_type,
+                "position": [x, 0, z],
+                "size": size,
+                "height": height,
+                "color": self._get_feature_color(feature_type)
+            })
+    
+    def _generate_clouds(self, count):
+        """Generate clouds at various heights"""
+        for _ in range(count):
+            x = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            y = random.uniform(30, 100)
+            z = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            size = random.uniform(10, 30)
+            
+            self.clouds.append({
+                "position": [x, y, z],
+                "size": size,
+                "speed": random.uniform(0.01, 0.05)
+            })
+    
+    def _generate_obstacles(self, count):
+        """Generate obstacles like birds or weather patterns"""
+        for _ in range(count):
+            obstacle_type = random.choice(["bird", "storm"])
+            x = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            y = random.uniform(15, 60)
+            z = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            
+            self.obstacles.append({
+                "type": obstacle_type,
+                "position": [x, y, z],
+                "size": random.uniform(2, 8),
+                "speed": random.uniform(0.05, 0.2)
+            })
+    
+    def _generate_collectibles(self, count):
+        """Generate collectibles like thermal updrafts or food"""
+        for _ in range(count):
+            collectible_type = random.choice(["thermal", "food"])
+            x = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            y = random.uniform(5, 40) if collectible_type == "thermal" else random.uniform(5, 20)
+            z = random.uniform(-self.terrain_size/2, self.terrain_size/2)
+            
+            self.collectibles.append({
+                "type": collectible_type,
+                "position": [x, y, z],
+                "size": random.uniform(5, 15) if collectible_type == "thermal" else random.uniform(1, 3),
+                "value": random.uniform(10, 30)
+            })
+    
+    def _get_feature_color(self, feature_type):
+        """Return color for different terrain features"""
+        if feature_type == "mountain":
+            return [0.6, 0.6, 0.6]  # Gray
+        elif feature_type == "lake":
+            return [0.1, 0.3, 0.8]  # Blue
+        elif feature_type == "forest":
+            return [0.1, 0.5, 0.1]  # Green
+        return [0.5, 0.5, 0.5]  # Default gray
+    
+    def update(self, bird_physics):
+        """Update world state based on bird position"""
+        # Get bird position
+        bird_pos = bird_physics.get_position()
+        
+        # Calculate current region (divide world into 100x100 regions)
+        current_region = (int(bird_pos[0] / 100), int(bird_pos[2] / 100))
+        
+        # If bird moved to a new region, generate new features
+        if current_region != self.last_region:
+            self._generate_terrain_features(3)
+            self._generate_clouds(2)
+            self._generate_obstacles(1)
+            self._generate_collectibles(2)
+            
+            # Remove far away features to keep memory usage reasonable
+            self._cleanup_distant_features(bird_pos)
+            
+            self.last_region = current_region
+        
+        # Update cloud positions
+        for cloud in self.clouds:
+            cloud["position"][0] += cloud["speed"]
+            # Wrap clouds around the world
+            if cloud["position"][0] > self.terrain_size/2:
+                cloud["position"][0] = -self.terrain_size/2
+        
+        # Update obstacle positions
+        for obstacle in self.obstacles:
+            # Move obstacles randomly
+            obstacle["position"][0] += random.uniform(-1, 1) * obstacle["speed"]
+            obstacle["position"][2] += random.uniform(-1, 1) * obstacle["speed"]
+            
+            # Keep obstacles within world bounds
+            for i in [0, 2]:
+                if obstacle["position"][i] > self.terrain_size/2:
+                    obstacle["position"][i] = self.terrain_size/2
+                elif obstacle["position"][i] < -self.terrain_size/2:
+                    obstacle["position"][i] = -self.terrain_size/2
+        
+        # Check for collectible collisions
+        for i, collectible in enumerate(self.collectibles):
+            # Calculate distance to bird
+            dx = collectible["position"][0] - bird_pos[0]
+            dy = collectible["position"][1] - bird_pos[1]
+            dz = collectible["position"][2] - bird_pos[2]
+            distance = math.sqrt(dx*dx + dy*dy + dz*dz)
+            
+            # If bird is close enough, apply effect
+            if distance < collectible["size"] + 2:
+                if collectible["type"] == "thermal":
+                    # Thermal updraft gives vertical momentum
+                    bird_physics.momentum[1] += 0.1
+                elif collectible["type"] == "food":
+                    # Food restores energy
+                    bird_physics.energy = min(bird_physics.energy_max, 
+                                             bird_physics.energy + collectible["value"])
+                
+                # Remove collected item
+                self.collectibles.pop(i)
+                # Generate a new one
+                self._generate_collectibles(1)
+                break
+        
+        # Return relevant world data near the bird
+        return self._get_nearby_world_data(bird_pos)
+    
+    def _cleanup_distant_features(self, bird_pos):
+        """Remove features that are too far from the bird"""
+        max_distance = self.terrain_size / 2
+        
+        # Filter terrain features
+        self.terrain_features = [f for f in self.terrain_features 
+                                if self._distance_2d(f["position"], bird_pos) < max_distance]
+        
+        # Filter clouds
+        self.clouds = [c for c in self.clouds 
+                      if self._distance_3d(c["position"], bird_pos) < max_distance]
+        
+        # Filter obstacles
+        self.obstacles = [o for o in self.obstacles 
+                         if self._distance_3d(o["position"], bird_pos) < max_distance]
+        
+        # Filter collectibles
+        self.collectibles = [c for c in self.collectibles 
+                            if self._distance_3d(c["position"], bird_pos) < max_distance]
+    
+    def _distance_2d(self, pos1, pos2):
+        """Calculate 2D distance (x,z plane)"""
+        dx = pos1[0] - pos2[0]
+        dz = pos1[2] - pos2[2]
+        return math.sqrt(dx*dx + dz*dz)
+    
+    def _distance_3d(self, pos1, pos2):
+        """Calculate 3D distance"""
+        dx = pos1[0] - pos2[0]
+        dy = pos1[1] - pos2[1]
+        dz = pos1[2] - pos2[2]
+        return math.sqrt(dx*dx + dy*dy + dz*dz)
+    
+    def _get_nearby_world_data(self, bird_pos):
+        """Return only world data that's near the bird"""
+        view_distance = 300  # How far the bird can see
+        
+        nearby_data = {
+            "terrain": [f for f in self.terrain_features 
+                       if self._distance_2d(f["position"], bird_pos) < view_distance],
+            "clouds": [c for c in self.clouds 
+                      if self._distance_3d(c["position"], bird_pos) < view_distance],
+            "obstacles": [o for o in self.obstacles 
+                         if self._distance_3d(o["position"], bird_pos) < view_distance],
+            "collectibles": [c for c in self.collectibles 
+                            if self._distance_3d(c["position"], bird_pos) < view_distance]
+        }
+        
+        return nearby_data

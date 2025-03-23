@@ -1,0 +1,15 @@
+{
+  "name": "bird-movement-game",
+  "version": "1.0.0",
+  "description": "A 3D bird game controlled by real-life movements using OpenCV",
+  "main": "server/app.py",
+  "scripts": {
+    "start": "python server/app.py",
+    "install-deps": "pip install flask flask-socketio opencv-python numpy"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.139.2"
+  }
+} 
