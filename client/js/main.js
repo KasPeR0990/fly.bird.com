@@ -72,11 +72,29 @@ const gameState = {
     showSkeleton: true
 };
 
-// Setup world and bird
-gameState.bird = setupWorld(scene);
-camera.position.z = 10;
-camera.position.y = 8;
-camera.lookAt(gameState.bird.position);
+// Create a basic fallback bird in case setupBird doesn't load properly
+function createFallbackBird() {
+    const birdGroup = new THREE.Group();
+    const birdBody = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x3366cc })
+    );
+    birdGroup.add(birdBody);
+    
+    // Add wings
+    const wingGeometry = new THREE.BoxGeometry(3, 0.2, 1);
+    const wingMaterial = new THREE.MeshBasicMaterial({ color: 0x6699cc });
+    
+    const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+    leftWing.position.set(-1.5, 0, 0);
+    birdGroup.add(leftWing);
+    
+    const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+    rightWing.position.set(1.5, 0, 0);
+    birdGroup.add(rightWing);
+    
+    return birdGroup;
+}
 
 // Load sound effects
 function loadSounds() {
@@ -336,9 +354,62 @@ export async function initGame() {
     console.log('Initializing game...');
     
     try {
-        // Setup webcam and socket communication
-        await setupVideo(socket);
+        // If setupBird or updateBird aren't defined properly, create fallbacks
+        if (typeof setupBird !== 'function') {
+            console.warn('setupBird not found, using fallback');
+            window.setupBird = function(scene) {
+                const bird = createFallbackBird();
+                scene.add(bird);
+                return bird;
+            };
+        }
         
+        if (typeof updateBird !== 'function') {
+            console.warn('updateBird not found, using fallback');
+            window.updateBird = function(bird, state, delta) {
+                // Simple animation
+                bird.position.y = state.height || 5;
+                bird.rotation.y = (state.turn || 0) * Math.PI;
+            };
+        }
+        
+        if (typeof setupWorld !== 'function') {
+            console.warn('setupWorld not found, using fallback');
+            window.setupWorld = function(scene) {
+                // Create a simple ground plane
+                const ground = new THREE.Mesh(
+                    new THREE.PlaneGeometry(1000, 1000),
+                    new THREE.MeshBasicMaterial({ color: 0x33cc33 })
+                );
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.y = 0;
+                scene.add(ground);
+                
+                // Create a basic bird
+                const bird = createFallbackBird();
+                bird.position.y = 5;
+                scene.add(bird);
+                
+                return bird;
+            };
+        }
+        
+        if (typeof updateWorld !== 'function') {
+            console.warn('updateWorld not found, using fallback');
+            window.updateWorld = function(scene, gameState) {
+                // Nothing to do in fallback
+            };
+        }
+        
+        // Setup webcam and socket communication
+        try {
+            await setupVideo(socket);
+            console.log('Video setup completed successfully');
+        } catch (videoError) {
+            console.error('Video setup failed, continuing without camera:', videoError);
+        }
+        
+        console.log('Starting animation loop');
         // Start the animation loop
         animate(0);
         
@@ -358,7 +429,17 @@ export async function initGame() {
         return true;
     } catch (error) {
         console.error('Error initializing game:', error);
-        throw error;
+        
+        // Try to do a basic initialization anyway
+        try {
+            scene.add(createFallbackBird());
+            animate(0);
+            console.log('Fallback initialization completed');
+            return true;
+        } catch (fallbackError) {
+            console.error('Fallback initialization also failed:', fallbackError);
+            throw error;
+        }
     }
 }
 
@@ -408,3 +489,26 @@ function animate(timestamp) {
         // Continue animation even if there's an error
     }
 }
+
+// Setup world and bird
+try {
+    gameState.bird = setupWorld(scene);
+} catch (e) {
+    console.error('Error in setupWorld:', e);
+    // Try fallback
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(1000, 1000),
+        new THREE.MeshBasicMaterial({ color: 0x33cc33 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = 0;
+    scene.add(ground);
+    
+    gameState.bird = createFallbackBird();
+    gameState.bird.position.y = 5;
+    scene.add(gameState.bird);
+}
+
+camera.position.z = 10;
+camera.position.y = 8;
+camera.lookAt(gameState.bird.position);

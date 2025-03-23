@@ -192,70 +192,83 @@ async function setupVideo(socket) {
 function sendFrames(socket) {
     // Check if video is paused or connection is lost
     if (!videoElement || videoElement.paused || videoElement.ended || connectionStatus === 'disconnected') {
+        console.log('Video unavailable, retrying in 500ms');
         setTimeout(() => sendFrames(socket), 500);
         return;
     }
     
-    const now = Date.now();
-    const elapsed = now - lastFrameTime;
-    
-    // Adjust frame rate based on connection status
-    if (connectionStatus === 'good') {
-        frameInterval = 1000 / 15;  // 15 FPS for good connection
-    } else if (connectionStatus === 'slow') {
-        frameInterval = 1000 / 8;   // 8 FPS for slow connection
-    } else {
-        frameInterval = 1000 / 10;  // 10 FPS default
-    }
-    
-    // Process frame at desired interval
-    if (elapsed > frameInterval) {
-        lastFrameTime = now;
+    try {
+        const now = Date.now();
+        const elapsed = now - lastFrameTime;
         
-        // Create a temp canvas for processing at reduced resolution
-        const tempCanvas = document.createElement('canvas');
-        const tempCtx = tempCanvas.getContext('2d');
+        // Adjust frame rate based on connection status
+        if (connectionStatus === 'good') {
+            frameInterval = 1000 / 15;  // 15 FPS for good connection
+        } else if (connectionStatus === 'slow') {
+            frameInterval = 1000 / 8;   // 8 FPS for slow connection
+        } else {
+            frameInterval = 1000 / 10;  // 10 FPS default
+        }
         
-        // Use smaller resolution for better performance
-        tempCanvas.width = 320;
-        tempCanvas.height = 240;
-        
-        // Draw the current video frame to the temp canvas
-        tempCtx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
-        
-        // Convert to data URL and send to server
-        const imageData = tempCanvas.toDataURL('image/jpeg', 0.7);
-        
-        // Add to processing buffer (to track pending frames)
-        processingBuffer.push(now);
-        
-        // Send frame to server
-        socket.emit('video_frame', { frame: imageData });
-        
-        // Update frame count (for metrics)
-        frameCount++;
-        if (frameCount % 30 === 0) {
-            // Calculate and display FPS
-            const fps = Math.round(30 * 1000 / (now - processingBuffer[processingBuffer.length - 30]));
-            displayVideoStatus(`Camera active: ${fps} FPS`);
+        // Process frame at desired interval
+        if (elapsed > frameInterval) {
+            lastFrameTime = now;
             
-            // Update connection status based on buffer size
-            if (processingBuffer.length > 60) {
-                connectionStatus = 'slow';
-                displayVideoStatus('Connection slow, reducing frame rate', 'warning');
-            } else {
-                connectionStatus = 'good';
+            try {
+                // Create a temp canvas for processing at reduced resolution
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Use smaller resolution for better performance
+                tempCanvas.width = 320;
+                tempCanvas.height = 240;
+                
+                // Draw the current video frame to the temp canvas
+                tempCtx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
+                
+                // Convert to data URL and send to server
+                const imageData = tempCanvas.toDataURL('image/jpeg', 0.7);
+                
+                // Add to processing buffer (to track pending frames)
+                processingBuffer.push(now);
+                
+                // Send frame to server
+                socket.emit('video_frame', { frame: imageData });
+            } catch (e) {
+                console.error('Error processing video frame:', e);
+            }
+            
+            // Update frame count (for metrics)
+            frameCount++;
+            if (frameCount % 30 === 0) {
+                try {
+                    // Calculate and display FPS
+                    const fps = Math.round(30 * 1000 / (now - processingBuffer[processingBuffer.length - 30]));
+                    displayVideoStatus(`Camera active: ${fps} FPS`);
+                    
+                    // Update connection status based on buffer size
+                    if (processingBuffer.length > 60) {
+                        connectionStatus = 'slow';
+                        displayVideoStatus('Connection slow, reducing frame rate', 'warning');
+                    } else {
+                        connectionStatus = 'good';
+                    }
+                } catch (e) {
+                    console.error('Error updating frame metrics:', e);
+                }
             }
         }
+        
+        // Clean up old frames from processing buffer
+        const thresholdTime = now - 5000;  // Remove frames older than 5 seconds
+        while (processingBuffer.length > 0 && processingBuffer[0] < thresholdTime) {
+            processingBuffer.shift();
+        }
+    } catch (e) {
+        console.error('Error in sendFrames:', e);
     }
     
-    // Clean up old frames from processing buffer
-    const thresholdTime = now - 5000;  // Remove frames older than 5 seconds
-    while (processingBuffer.length > 0 && processingBuffer[0] < thresholdTime) {
-        processingBuffer.shift();
-    }
-    
-    // Request next frame
+    // Always request next frame, even if there was an error
     requestAnimationFrame(() => sendFrames(socket));
 }
 
